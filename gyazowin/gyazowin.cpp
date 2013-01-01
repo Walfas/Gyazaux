@@ -25,8 +25,8 @@ BOOL				isPng(LPCTSTR fileName);
 VOID				drawRubberband(HDC hdc, LPRECT newRect, BOOL erase);
 VOID				execUrl(const char* str);
 VOID				setClipBoardText(const char* str);
-BOOL				convertPNG(LPCTSTR destFile, LPCTSTR srcFile);
-BOOL				savePNG(LPCTSTR fileName, HBITMAP newBMP);
+BOOL				convertImage(LPCTSTR destFile, LPCTSTR srcFile, const WCHAR* format=L"image/png");
+BOOL				saveImage(LPCTSTR fileName, HBITMAP newBMP, const WCHAR* format=L"image/png");
 BOOL				uploadFile(HWND hwnd, LPCTSTR fileName);
 std::string			getId();
 BOOL				saveId(const WCHAR* str);
@@ -70,7 +70,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 			GetTempPath(MAX_PATH, tmpDir);
 			GetTempFileName(tmpDir, _T("gya"), 0, tmpFile);
 			
-			if (convertPNG(tmpFile, __targv[1])) {
+			if (convertImage(tmpFile, __targv[1])) {
 				//アップロード
 				uploadFile(NULL, tmpFile);
 			} else {
@@ -295,50 +295,10 @@ VOID drawRubberband(HDC hdc, LPRECT newRect, BOOL erase)
 
 	
 	return;
-
-/* rakusai 2009/11/2
-
-	// XOR で描画
-	int hPreRop = SetROP2(hdc, R2_XORPEN);
-
-	// 点線
-	HPEN hPen = CreatePen(PS_DOT , 1, 0);
-	SelectObject(hdc, hPen);
-	SelectObject(hdc, GetStockObject(NULL_BRUSH));
-
-	if(!firstDraw) {
-		// 前のを消す
-		Rectangle(hdc, lastRect.left, lastRect.top, 
-			lastRect.right + 1, lastRect.bottom + 1);
-	} else {
-		firstDraw = FALSE;
-	}
-	
-	// 新しい座標を記憶
-	lastRect = *newRect;
-	
-	
-
-
-	if (!erase) {
-
-		// 枠を描画
-		Rectangle(hdc, lastRect.left, lastRect.top, 
-			lastRect.right + 1, lastRect.bottom + 1);
-
-	}
-
-
-	// 後処理
-	SetROP2(hdc, hPreRop);
-	DeleteObject(hPen);
-
-*/
-
 }
 
-// PNG 形式に変換
-BOOL convertPNG(LPCTSTR destFile, LPCTSTR srcFile)
+// PNG/JPG 形式に変換
+BOOL convertImage(LPCTSTR destFile, LPCTSTR srcFile, const WCHAR* format)
 {
 	BOOL				res = FALSE;
 
@@ -351,14 +311,12 @@ BOOL convertPNG(LPCTSTR destFile, LPCTSTR srcFile)
 
 	Image *b = new Image(srcFile, 0);
 
-	if (0 == b->GetLastStatus()) {
-		if (GetEncoderClsid(L"image/png", &clsidEncoder)) {
-			// save!
-			if (0 == b->Save(destFile, &clsidEncoder, 0) ) {
-					// 保存できた
-					res = TRUE;
-			}
-		}
+	if (b->GetLastStatus() == 0 && 
+		//GetEncoderClsid(L"image/png", &clsidEncoder) &&
+		GetEncoderClsid(format, &clsidEncoder) &&
+		b->Save(destFile, &clsidEncoder, 0) == 0) 
+	{
+			res = TRUE;
 	}
 
 	// 後始末
@@ -368,8 +326,8 @@ BOOL convertPNG(LPCTSTR destFile, LPCTSTR srcFile)
 	return res;
 }
 
-// PNG 形式で保存 (GDI+ 使用)
-BOOL savePNG(LPCTSTR fileName, HBITMAP newBMP)
+// PNG/JPG 形式で保存 (GDI+ 使用)
+BOOL saveImage(LPCTSTR fileName, HBITMAP newBMP, const WCHAR* format)
 {
 	BOOL				res = FALSE;
 
@@ -383,13 +341,12 @@ BOOL savePNG(LPCTSTR fileName, HBITMAP newBMP)
 	// HBITMAP から Bitmap を作成
 	Bitmap *b = new Bitmap(newBMP, NULL);
 	
-	if (GetEncoderClsid(L"image/png", &clsidEncoder)) {
-		// save!
-		if (0 ==
-			b->Save(fileName, &clsidEncoder, 0) ) {
-				// 保存できた
-				res = TRUE;
-		}
+	if (//GetEncoderClsid(L"image/png", &clsidEncoder) || 
+		GetEncoderClsid(format, &clsidEncoder) &&
+		b->Save(fileName, &clsidEncoder, 0) == 0) 
+	{
+		if (b->Save(fileName, &clsidEncoder, 0) == 0) // save!
+			res = TRUE;
 	}
 	
 	// 後始末
@@ -587,50 +544,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			
 			// ウィンドウを隠す!
 			ShowWindow(hWnd, SW_HIDE);
-			/*
-			// 画像をクリップボードにコピー
-			if ( OpenClipboard(hWnd) ) {
-				// 消去
-				EmptyClipboard();
-				// セット
-				SetClipboardData(CF_BITMAP, newBMP);
-				// 閉じる
-				CloseClipboard();
-			}
-			*/
 			
 			// テンポラリファイル名を決定
 			TCHAR tmpDir[MAX_PATH], tmpFile[MAX_PATH];
 			GetTempPath(MAX_PATH, tmpDir);
 			GetTempFileName(tmpDir, _T("gya"), 0, tmpFile);
 			
-			if (savePNG(tmpFile, newBMP)) {
-
-				// うｐ
-				if (!uploadFile(hWnd, tmpFile)) {
-					// アップロードに失敗...
-					// エラーメッセージは既に表示されている
-
-					/*
-					TCHAR sysDir[MAX_PATH];
-					if (SUCCEEDED(StringCchCopy(sysDir, MAX_PATH, tmpFile)) &&
-						SUCCEEDED(StringCchCat(sysDir, MAX_PATH, _T(".png")))) {
-						
-						MoveFile(tmpFile, sysDir);
-						SHELLEXECUTEINFO lsw = {0};
-						
-						lsw.hwnd	= hWnd;
-						lsw.cbSize	= sizeof(SHELLEXECUTEINFO);
-						lsw.lpVerb	= _T("open");
-						lsw.lpFile	= sysDir;
-
-						ShellExecuteEx(&lsw);
-					}
-					*/
-				}
+			if (saveImage(tmpFile, newBMP)) {
+				uploadFile(hWnd, tmpFile);
 			} else {
 				// PNG保存失敗...
-				MessageBox(hWnd, _T("Cannot save png image"), szTitle, 
+				MessageBox(hWnd, _T("Cannot save image"), szTitle, 
 					MB_OK | MB_ICONERROR);
 			}
 
@@ -791,8 +715,12 @@ BOOL saveId(const WCHAR* str)
 // PNG ファイルをアップロードする.
 BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 {
-	const TCHAR* UPLOAD_SERVER	= _T("gyazo.com");
-	const TCHAR* UPLOAD_PATH	= _T("/upload.cgi");
+	TCHAR upload_server[256], upload_path[512];
+	// Load host info from gyazowin.ini if it exists; else use default gyazo
+	GetPrivateProfileString(L"host", L"upload_server", L"gyazo.com", 
+		upload_server, sizeof upload_server, L".\\gyazowin.ini");
+	GetPrivateProfileString(L"host", L"upload_path", L"/upload.cgi", 
+		upload_path, sizeof upload_path, L".\\gyazowin.ini");
 
 	const char*  sBoundary = "----BOUNDARYBOUNDARY----";		// boundary
 	const char   sCrLf[]   = { 0xd, 0xa, 0x0 };					// 改行(CR+LF)
@@ -820,22 +748,20 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 	buf << "--";
 	buf << sBoundary;
 	buf << sCrLf;
-	buf << "content-disposition: form-data; name=\"imagedata\"; filename=\"gyazo.com\"";
+	buf << "content-disposition: form-data; name=\"imagedata\"; filename=\"gyazo.png\"";
 	buf << sCrLf;
-	//buf << "Content-type: image/png";	// 一応
-	//buf << sCrLf;
 	buf << sCrLf;
 
 	// 本文: PNG ファイルを読み込む
-	std::ifstream png;
-	png.open(fileName, std::ios::binary);
-	if (png.fail()) {
-		MessageBox(hwnd, _T("PNG open failed"), szTitle, MB_ICONERROR | MB_OK);
-		png.close();
+	std::ifstream img;
+	img.open(fileName, std::ios::binary);
+	if (img.fail()) {
+		MessageBox(hwnd, _T("Image open failed"), szTitle, MB_ICONERROR | MB_OK);
+		img.close();
 		return FALSE;
 	}
-	buf << png.rdbuf();		// read all & append to buffer
-	png.close();
+	buf << img.rdbuf();		// read all & append to buffer
+	img.close();
 
 	// 最後
 	buf << sCrLf;
@@ -858,7 +784,7 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 	
 	// 接続先
 	HINTERNET hConnection = InternetConnect(hSession, 
-		UPLOAD_SERVER, INTERNET_DEFAULT_HTTP_PORT,
+		upload_server, INTERNET_DEFAULT_HTTP_PORT,
 		NULL, NULL, INTERNET_SERVICE_HTTP, 0, NULL);
 	if(NULL == hSession) {
 		MessageBox(hwnd, _T("Cannot initiate connection"),
@@ -868,7 +794,7 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 
 	// 要求先の設定
 	HINTERNET hRequest    = HttpOpenRequest(hConnection,
-		_T("POST"), UPLOAD_PATH, NULL,
+		_T("POST"), upload_path, NULL,
 		NULL, NULL, INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_RELOAD, NULL);
 	if(NULL == hSession) {
 		MessageBox(hwnd, _T("Cannot compose post request"),
@@ -903,7 +829,7 @@ BOOL uploadFile(HWND hwnd, LPCTSTR fileName)
 		HttpQueryInfo(hRequest, HTTP_QUERY_STATUS_CODE, resCode, &resLen, 0);
 		if( _ttoi(resCode) != 200 ) {
 			// upload 失敗 (status error)
-			MessageBox(hwnd, _T("Failed to upload (unexpected result code, under maintainance?)"),
+			MessageBox(hwnd, resCode,
 				szTitle, MB_ICONERROR | MB_OK);
 		} else {
 			// upload succeeded
