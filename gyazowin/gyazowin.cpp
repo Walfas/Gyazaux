@@ -86,6 +86,18 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 {
 	WNDCLASS wc;
 
+	wc.style         = CS_HREDRAW | CS_VREDRAW;;
+	wc.lpfnWndProc   = (WNDPROC) NameDlgProc;
+	wc.cbClsExtra    = 0;
+	wc.cbWndExtra    = 0;
+	wc.hInstance     = hInstance;
+	wc.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GYAZOWIN));
+	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+	wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+	wc.lpszMenuName  = 0;
+	wc.lpszClassName = szWindowClassN;
+	RegisterClass(&wc);
+
 	// メインウィンドウ
 	wc.style         = 0;							// WM_PAINT を送らない
 	wc.lpfnWndProc   = WndProc;
@@ -110,18 +122,6 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 	wc.lpszMenuName  = 0;
 	wc.lpszClassName = szWindowClassL;
-	RegisterClass(&wc);
-
-	wc.style         = 0;							// WM_PAINT を送らない
-	wc.lpfnWndProc   = (WNDPROC)NameDlgProc;
-	wc.cbClsExtra    = 0;
-	wc.cbWndExtra    = DLGWINDOWEXTRA;
-	wc.hInstance     = hInstance;
-	wc.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GYAZOWIN));
-	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);	// + のカーソル
-	wc.hbrBackground = 0;							// 背景も設定しない
-	wc.lpszMenuName  = 0;
-	wc.lpszClassName = szWindowClassN;
 	return RegisterClass(&wc);
 }
 
@@ -130,7 +130,6 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 	HWND hWnd;
-	//HWND hLayerWnd;
 	hInst = hInstance; // グローバル変数にインスタンス処理を格納します。
 
 	int x, y, w, h;
@@ -186,7 +185,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 		WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
 		szWindowClassN, NULL, WS_POPUP,
 		100, 100, 150, 40,
-		hWnd, NULL, hInstance, NULL
+		NULL, NULL, hInstance, NULL
 	);
 
 	// レイヤーウィンドウの作成
@@ -374,9 +373,14 @@ LRESULT CALLBACK LayerWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 BOOL CALLBACK NameDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch(message) {
+	case WM_INITDIALOG:
+		CheckDlgButton(hWnd, IDC_PNG, BST_CHECKED);
+		SetForegroundWindow(hWnd);
+		SetDlgItemText(hWnd, IDC_NAME, _T("File name"));
+		return TRUE;
+		break;
 	case WM_COMMAND:
-        switch(LOWORD(wParam))
-        {
+        switch(LOWORD(wParam)) {
         case IDOK:
             EndDialog(hWnd, IDOK);
         break;
@@ -385,7 +389,7 @@ BOOL CALLBACK NameDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PostQuitMessage(0);
         break;
         }
-        break;
+		break;
     }
     return TRUE;
 }
@@ -503,8 +507,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			TCHAR tmpDir[MAX_PATH], tmpFile[MAX_PATH];
 			GetTempPath(MAX_PATH, tmpDir);
 			GetTempFileName(tmpDir, _T("gya"), 0, tmpFile);
-
-			DialogBox(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_NAME), hNameWnd, NameDlgProc);
+/*
+			HWND hDlg;
+			hDlg = CreateDialogParam(hInst, MAKEINTRESOURCE(IDD_NAME), 0, NameDlgProc, 0);
+			ShowWindow(hDlg, SW_SHOW);*/
+			DialogBox(hInst, MAKEINTRESOURCE(IDD_NAME), hNameWnd, NameDlgProc);
 
 			if (saveImage(tmpFile, newBMP)) {
 				uploadFile(hWnd, tmpFile);
