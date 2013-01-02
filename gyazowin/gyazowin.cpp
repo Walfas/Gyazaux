@@ -5,6 +5,7 @@ HINSTANCE hInst;
 TCHAR *szTitle			= _T("Gyazaux");
 TCHAR *szWindowClass	= _T("GYAZOWIN");
 TCHAR *szWindowClassL	= _T("GYAZOWINL");
+TCHAR *iniLocation		= _T(".\\gyazaux.ini");
 HWND hLayerWnd;
 
 int ofX, ofY;	// 画面オフセット
@@ -348,6 +349,16 @@ LRESULT CALLBACK LayerWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 
 }
 
+void setDataFromIni(struct nameData *data) {
+	// Set the default name
+	GetPrivateProfileString(_T("file"), _T("default_name"), _T(""), 
+		data->name, FNAME_MAXLEN, iniLocation);
+
+	// Set default image type
+	data->isPng = !GetPrivateProfileInt(_T("file"), 
+		_T("default_jpg"), 0, iniLocation);
+}
+
 INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	struct nameData *data;
@@ -356,8 +367,14 @@ INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 	case WM_INITDIALOG:
 		data = (struct nameData *)lParam;
 		SetWindowLongPtr(hDlg,DWLP_USER, (LONG)data);
+		setDataFromIni(data);
 
-		CheckDlgButton(hDlg, IDC_PNG, BST_CHECKED);
+		if (!GetPrivateProfileInt(_T("file"), _T("ask"), 0, iniLocation))
+			EndDialog(hDlg, IDOK);
+
+		SetDlgItemText(hDlg, IDC_NAME, data->name);
+		CheckDlgButton(hDlg, (data->isPng) ? IDC_PNG : IDC_JPG, BST_CHECKED);
+
 		SetForegroundWindow(hDlg);
 		return TRUE;
 
@@ -665,11 +682,12 @@ BOOL saveId(const WCHAR* str)
 BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, TCHAR *fileName, BOOL isPng)
 {
 	TCHAR upload_server[256], upload_path[512];
+
 	// Load host info from gyazowin.ini if it exists; else use default gyazo
 	GetPrivateProfileString(_T("host"), _T("upload_server"), _T("gyazo.com"), 
-		upload_server, sizeof upload_server, _T(".\\gyazaux.ini"));
+		upload_server, sizeof upload_server, iniLocation);
 	GetPrivateProfileString(_T("host"), _T("upload_path"), _T("/upload.cgi"), 
-		upload_path, sizeof upload_path, _T(".\\gyazaux.ini"));
+		upload_path, sizeof upload_path, iniLocation);
 
 	const char*  sBoundary = "----BOUNDARYBOUNDARY----";		// boundary
 	const char   sCrLf[]   = { 0xd, 0xa, 0x0 };					// 改行(CR+LF)
