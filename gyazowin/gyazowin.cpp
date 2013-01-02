@@ -1,17 +1,11 @@
-// gyazowin.cpp : アプリケーションのエントリ ポイントを定義します。
-//
-
 #include "stdafx.h"
 #include "gyazowin.h"
 
-// グローバル変数:
-HINSTANCE hInst;							// 現在のインターフェイス
-TCHAR *szTitle			= _T("Gyazo");		// タイトル バーのテキスト
-TCHAR *szWindowClass	= _T("GYAZOWIN");	// メイン ウィンドウ クラス名
-TCHAR *szWindowClassL	= _T("GYAZOWINL");	// レイヤー ウィンドウ クラス名
-TCHAR *szWindowClassN	= _T("GYAZOWINN");
+HINSTANCE hInst;
+TCHAR *szTitle			= _T("Gyazaux");
+TCHAR *szWindowClass	= _T("GYAZOWIN");
+TCHAR *szWindowClassL	= _T("GYAZOWINL");
 HWND hLayerWnd;
-HWND hNameWnd;
 
 int ofX, ofY;	// 画面オフセット
 
@@ -20,15 +14,16 @@ ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK	LayerWndProc(HWND, UINT, WPARAM, LPARAM);
-BOOL    CALLBACK	NameDlgProc(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK	NameDlgProc(HWND, UINT, WPARAM, LPARAM);
 
-int					GetEncoderClsid(const WCHAR* format, CLSID* pClsid);
+int					GetEncoderClsid(const TCHAR* format, CLSID* pClsid);
 
 VOID				drawRubberband(HDC hdc, LPRECT newRect, BOOL erase);
 VOID				execUrl(const char* str);
 VOID				setClipBoardText(const char* str);
-BOOL				saveImage(LPCTSTR fileName, HBITMAP newBMP, const WCHAR* format=_T("image/png"));
-BOOL				uploadFile(HWND hwnd, LPCTSTR tmpFileName, CCHAR *fileName="gyazaux");
+BOOL				saveImage(LPCTSTR fileName, HBITMAP newBMP, BOOL isPng=TRUE);
+BOOL				uploadFile(HWND hwnd, LPCTSTR tmpFileName, 
+								TCHAR *fileName=_T(""), BOOL isPng=TRUE);
 std::string			getId();
 BOOL				saveId(const WCHAR* str);
 
@@ -85,18 +80,6 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
 	WNDCLASS wc;
-
-	wc.style         = CS_HREDRAW | CS_VREDRAW;;
-	wc.lpfnWndProc   = (WNDPROC) NameDlgProc;
-	wc.cbClsExtra    = 0;
-	wc.cbWndExtra    = 0;
-	wc.hInstance     = hInstance;
-	wc.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GYAZOWIN));
-	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-	wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
-	wc.lpszMenuName  = 0;
-	wc.lpszClassName = szWindowClassN;
-	RegisterClass(&wc);
 
 	// メインウィンドウ
 	wc.style         = 0;							// WM_PAINT を送らない
@@ -181,13 +164,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
     SetLayeredWindowAttributes(hLayerWnd, RGB(255, 0, 0), 100, LWA_COLORKEY|LWA_ALPHA);
 
-	hNameWnd = CreateWindowEx(
-		WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-		szWindowClassN, NULL, WS_POPUP,
-		100, 100, 150, 40,
-		NULL, NULL, hInstance, NULL
-	);
-
 	// レイヤーウィンドウの作成
 	return TRUE;
 }
@@ -264,7 +240,7 @@ VOID drawRubberband(HDC hdc, LPRECT newRect, BOOL erase)
 }
 
 // PNG/JPG 形式で保存 (GDI+ 使用)
-BOOL saveImage(LPCTSTR fileName, HBITMAP newBMP, const WCHAR* format)
+BOOL saveImage(LPCTSTR fileName, HBITMAP newBMP, BOOL isPng)
 {
 	BOOL				res = FALSE;
 
@@ -278,15 +254,18 @@ BOOL saveImage(LPCTSTR fileName, HBITMAP newBMP, const WCHAR* format)
 	// HBITMAP から Bitmap を作成
 	Bitmap *b = new Bitmap(newBMP, NULL);
 	
-	if (//GetEncoderClsid(_T("image/png"), &clsidEncoder) || 
-		GetEncoderClsid(format, &clsidEncoder) &&
+	const TCHAR* format;
+	if (isPng == FALSE)
+		format = _T("image/jpeg");
+	else 
+		format = _T("image/png");
+
+	if (GetEncoderClsid(format, &clsidEncoder) &&
 		b->Save(fileName, &clsidEncoder, 0) == 0) 
 	{
-		if (b->Save(fileName, &clsidEncoder, 0) == 0) // save!
 			res = TRUE;
 	}
 	
-	// 後始末
 	delete b;
 	GdiplusShutdown(gdiplusToken);
 
@@ -302,11 +281,10 @@ LRESULT CALLBACK LayerWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 	HPEN hPen;
 	HFONT hFont;
 
-
 	switch (message)
 	{
 	case WM_ERASEBKGND:
-		 GetClientRect(hWnd, &clipRect);
+		GetClientRect(hWnd, &clipRect);
 		
 		hdc = GetDC(hWnd);
         hBrush = CreateSolidBrush(RGB(100,100,100));
@@ -370,29 +348,40 @@ LRESULT CALLBACK LayerWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 
 }
 
-BOOL CALLBACK NameDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    switch(message) {
+	struct nameData *data;
+	switch (message)
+	{
 	case WM_INITDIALOG:
-		CheckDlgButton(hWnd, IDC_PNG, BST_CHECKED);
-		SetForegroundWindow(hWnd);
-		SetDlgItemText(hWnd, IDC_NAME, _T("File name"));
+		data = (struct nameData *)lParam;
+		SetWindowLongPtr(hDlg,DWLP_USER, (LONG)data);
+
+		CheckDlgButton(hDlg, IDC_PNG, BST_CHECKED);
+		SetForegroundWindow(hDlg);
 		return TRUE;
-		break;
+
 	case WM_COMMAND:
-        switch(LOWORD(wParam)) {
+		data = (nameData *)GetWindowLongPtr(hDlg, DWLP_USER);
+
+		switch(LOWORD(wParam)) {
         case IDOK:
-            EndDialog(hWnd, IDOK);
+			// Set the file name and image type
+			GetDlgItemText(hDlg, IDC_NAME, data->name, FNAME_MAXLEN);
+			data->isPng = (SendMessage(GetDlgItem(hDlg, IDC_PNG), BM_GETCHECK, 0, 0) == BST_CHECKED);
+            EndDialog(hDlg, IDOK);
+			return TRUE;
         break;
         case IDCANCEL:
-            EndDialog(hWnd, IDCANCEL);
+            EndDialog(hDlg, IDCANCEL);
 			PostQuitMessage(0);
         break;
-        }
+		}
 		break;
-    }
-    return TRUE;
+	}
+	return FALSE;
 }
+
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -507,16 +496,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			TCHAR tmpDir[MAX_PATH], tmpFile[MAX_PATH];
 			GetTempPath(MAX_PATH, tmpDir);
 			GetTempFileName(tmpDir, _T("gya"), 0, tmpFile);
-/*
-			HWND hDlg;
-			hDlg = CreateDialogParam(hInst, MAKEINTRESOURCE(IDD_NAME), 0, NameDlgProc, 0);
-			ShowWindow(hDlg, SW_SHOW);*/
-			DialogBox(hInst, MAKEINTRESOURCE(IDD_NAME), hNameWnd, NameDlgProc);
 
-			if (saveImage(tmpFile, newBMP)) {
-				uploadFile(hWnd, tmpFile);
+			struct nameData data;
+			DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_NAME), NULL, 
+				NameDlgProc, (LPARAM)&data);
+
+			if (saveImage(tmpFile, newBMP, data.isPng)) {
+				uploadFile(hWnd, tmpFile, data.name, data.isPng);
 			} else {
-				// PNG保存失敗...
 				MessageBox(hWnd, _T("Cannot save image"), szTitle, 
 					MB_OK | MB_ICONERROR);
 			}
@@ -675,14 +662,14 @@ BOOL saveId(const WCHAR* str)
 }
 
 // PNG ファイルをアップロードする.
-BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, CCHAR *fileName)
+BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, TCHAR *fileName, BOOL isPng)
 {
 	TCHAR upload_server[256], upload_path[512];
 	// Load host info from gyazowin.ini if it exists; else use default gyazo
 	GetPrivateProfileString(_T("host"), _T("upload_server"), _T("gyazo.com"), 
-		upload_server, sizeof upload_server, _T(".\\gyazowin.ini"));
+		upload_server, sizeof upload_server, _T(".\\gyazaux.ini"));
 	GetPrivateProfileString(_T("host"), _T("upload_path"), _T("/upload.cgi"), 
-		upload_path, sizeof upload_path, _T(".\\gyazowin.ini"));
+		upload_path, sizeof upload_path, _T(".\\gyazaux.ini"));
 
 	const char*  sBoundary = "----BOUNDARYBOUNDARY----";		// boundary
 	const char   sCrLf[]   = { 0xd, 0xa, 0x0 };					// 改行(CR+LF)
@@ -706,12 +693,24 @@ BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, CCHAR *fileName)
 	buf << idStr;
 	buf << sCrLf;
 
+	/*
+	CCHAR str[FNAME_MAXLEN];
+	wcstombs_s(0,str,sizeof str,fileName,FNAME_MAXLEN);
+	OutputDebugString(fileName);
+	OutputDebugStringA(str);*/
+
 	// -- "imagedata" part
 	buf << "--";
 	buf << sBoundary;
 	buf << sCrLf;
 	buf << "content-disposition: form-data; name=\"imagedata\"; filename=\"";
-	buf << fileName;
+	//buf << fileName;
+	//buf << str;
+	if (isPng == FALSE)
+		buf << ".jpg";
+	else
+		buf << ".png";
+
 	buf << "\"";
 	buf << sCrLf;
 	buf << sCrLf;
