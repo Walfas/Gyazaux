@@ -369,6 +369,7 @@ INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 		SetWindowLongPtr(hDlg,DWLP_USER, (LONG)data);
 		setDataFromIni(data);
 
+		// If "ask" isn't set, don't show the popup
 		if (!GetPrivateProfileInt(_T("file"), _T("ask"), 0, iniLocation))
 			EndDialog(hDlg, IDOK);
 
@@ -647,11 +648,11 @@ BOOL saveId(const WCHAR* str)
 	 _tcscpy_s( idDir, idFile);
 	 _tcscat_s( idFile, _T("\\id.txt"));
 
-	const TCHAR*	 idOldFile			= _T("id.txt");
+	const TCHAR* idOldFile = _T("id.txt");
 
 	size_t  slen;
 	size_t  dcount;
-	slen  = _tcslen(str) + 1; // NULL
+	slen  = _tcslen(str) + 1;
 
 	char *idStr = (char *)malloc(slen * sizeof(char));
 	// ƒoƒCƒg•¶Žš‚É•ÏŠ·
@@ -711,19 +712,17 @@ BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, TCHAR *fileName, BOOL isPng)
 	buf << idStr;
 	buf << sCrLf;
 
-	/*
-	CCHAR str[FNAME_MAXLEN];
-	wcstombs_s(0,str,sizeof str,fileName,FNAME_MAXLEN);
-	OutputDebugString(fileName);
-	OutputDebugStringA(str);*/
+	
+	CCHAR niceFileName[FNAME_MAXLEN];
+	wcstombs_s(0,niceFileName,sizeof niceFileName,fileName,FNAME_MAXLEN);
 
 	// -- "imagedata" part
 	buf << "--";
 	buf << sBoundary;
 	buf << sCrLf;
 	buf << "content-disposition: form-data; name=\"imagedata\"; filename=\"";
-	//buf << fileName;
-	//buf << str;
+
+	buf << niceFileName;
 	if (isPng == FALSE)
 		buf << ".jpg";
 	else
