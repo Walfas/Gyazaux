@@ -29,8 +29,8 @@ Options are available in the `gyazaux.ini` file. Defaults:
 	* The actual file name that gets sent to the server will be whatever you 
 		enter in the box, postfixed with `.png` or `.jpg`. 
 	* Leaving this blank is fine too; the naming will be left up to the server.
-* `ask`: If nonzero, the default options will be used each time, without 
-	a popup window (like standard Gyazo).
+* `ask`: If zero, the default options will be used each time, without 
+	a popup window (like standard Gyazo). Otherwise, popup. 
 
 ### Acknowledgements
 * Gyazo for Mac was first developed by Toshiyuki Masui
