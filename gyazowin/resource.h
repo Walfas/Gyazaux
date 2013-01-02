@@ -9,6 +9,11 @@
 #define IDI_GYAZOWIN                    132
 #define IDC_STATIC                      -1
 
+#define IDD_NAME                        135
+#define IDC_NAME                        1002
+#define IDC_PNG                         1003
+#define IDC_JPG                         1004
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
