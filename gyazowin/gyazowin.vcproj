@@ -92,7 +92,6 @@
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
-				Description=""
 				CommandLine=""
 			/>
 		</Configuration>
@@ -169,7 +168,7 @@
 			<Tool
 				Name="VCPostBuildEventTool"
 				Description="Copy the ini file"
-				CommandLine="copy $(SolutionDir)\gyazowin.ini $(OutDir)\gyazowin.ini"
+				CommandLine="copy $(SolutionDir)\gyazaux.ini $(OutDir)\gyazaux.ini"
 			/>
 		</Configuration>
 		<Configuration
