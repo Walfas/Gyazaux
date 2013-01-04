@@ -391,7 +391,6 @@ INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 			return TRUE;
         break;
         case IDCANCEL:
-            EndDialog(hDlg, IDCANCEL);
 			PostQuitMessage(0);
         break;
 		}
