@@ -352,7 +352,7 @@ LRESULT CALLBACK LayerWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 void setDataFromIni(struct nameData *data) {
 	// Set the default name
 	GetPrivateProfileString(_T("file"), _T("default_name"), _T(""), 
-		data->name, FNAME_MAXLEN, iniLocation);
+		data->name, MAX_PATH, iniLocation);
 
 	// Set default image type
 	data->isPng = !GetPrivateProfileInt(_T("file"), 
@@ -385,7 +385,7 @@ INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 		switch(LOWORD(wParam)) {
         case IDOK:
 			// Set the file name and image type
-			GetDlgItemText(hDlg, IDC_NAME, data->name, FNAME_MAXLEN);
+			GetDlgItemText(hDlg, IDC_NAME, data->name, MAX_PATH);
 			data->isPng = (SendMessage(GetDlgItem(hDlg, IDC_PNG), BM_GETCHECK, 0, 0) == BST_CHECKED);
             EndDialog(hDlg, IDOK);
 			return TRUE;
@@ -399,7 +399,37 @@ INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 	return FALSE;
 }
 
+void ErrorExit(LPTSTR lpszFunction) 
+{ 
+    // Retrieve the system error message for the last-error code
 
+    LPVOID lpMsgBuf;
+    LPVOID lpDisplayBuf;
+    DWORD dw = GetLastError(); 
+
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        dw,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPTSTR) &lpMsgBuf,
+        0, NULL );
+
+    // Display the error message and exit the process
+    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, 
+        (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR)); 
+    StringCchPrintf((LPTSTR)lpDisplayBuf, 
+        LocalSize(lpDisplayBuf) / sizeof(TCHAR),
+		TEXT("%s: %s (%d)"), 
+        lpszFunction, lpMsgBuf, dw); 
+    MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK); 
+
+    LocalFree(lpMsgBuf);
+    LocalFree(lpDisplayBuf);
+    ExitProcess(dw); 
+}
 // ウィンドウプロシージャ
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -510,19 +540,52 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			ShowWindow(hWnd, SW_HIDE);
 			
 			// テンポラリファイル名を決定
-			TCHAR tmpDir[MAX_PATH], tmpFile[MAX_PATH];
-			GetTempPath(MAX_PATH, tmpDir);
-			GetTempFileName(tmpDir, _T("gya"), 0, tmpFile);
-
+			TCHAR tmpDir[MAX_PATH], tmpFile[MAX_PATH], *imgExt;
 			struct nameData data;
 			DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_NAME), NULL, 
 				NameDlgProc, (LPARAM)&data);
+			imgExt = data.isPng ? _T(".png") : _T(".jpg");
+			StringCchCat(tmpFile, MAX_PATH, imgExt);
+
+			GetTempPath(MAX_PATH, tmpDir);
+			GetTempFileName(tmpDir,_T("gya"), 0, tmpFile);
+			StringCchCat(tmpFile, MAX_PATH, imgExt);
 
 			if (saveImage(tmpFile, newBMP, data.isPng)) {
-				uploadFile(hWnd, tmpFile, data.name, data.isPng);
+				/*
+				if (GetPrivateProfileInt(_T("file"), _T("preview"), 0, iniLocation))
+					ShellExecute(NULL, _T("open"), tmpFile, NULL, NULL, SW_SHOWNORMAL);
+				*/
+				uploadFile(hWnd, tmpFile, data.name, data.isPng); // DISABLED FOR DEBUG
 			} else {
 				MessageBox(hWnd, _T("Cannot save image"), szTitle, 
 					MB_OK | MB_ICONERROR);
+			}
+
+			TCHAR localDir[MAX_PATH], localPath[MAX_PATH];
+			GetPrivateProfileString(_T("file"), _T("save_local"), _T(""), 
+				localDir, MAX_PATH, iniLocation);
+
+			wchar_t counterBuf[16];
+			int i = 0;
+			if (_tcslen(localDir) > 0) {
+				// Append counter to file if file already exists
+				// Note: Could be slow if many files exist with same prefix
+				for(i=0;;i++) {
+					wcscpy_s(localPath, MAX_PATH, localDir);
+					StringCchCat(localPath, MAX_PATH, _T("\\"));
+					StringCchCat(localPath, MAX_PATH, data.name);
+					if (i) {
+						_itow_s(i, counterBuf, 16, 10);
+						StringCchCat(localPath, MAX_PATH, counterBuf);
+					}
+					StringCchCat(localPath, MAX_PATH, imgExt);
+					
+					if (CopyFile(tmpFile,localPath,true))
+						break;
+					if (GetLastError() != ERROR_FILE_EXISTS)
+						ErrorExit(_T("Local save failed"));
+				}
 			}
 
 			// 後始末
@@ -681,7 +744,7 @@ BOOL saveId(const WCHAR* str)
 // PNG ファイルをアップロードする.
 BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, TCHAR *fileName, BOOL isPng)
 {
-	TCHAR upload_server[256], upload_path[512];
+	TCHAR upload_server[MAX_PATH], upload_path[MAX_PATH*2];
 
 	// Load host info from gyazowin.ini if it exists; else use default gyazo
 	GetPrivateProfileString(_T("host"), _T("upload_server"), _T("gyazo.com"), 
@@ -712,8 +775,8 @@ BOOL uploadFile(HWND hwnd, LPCTSTR tmpFileName, TCHAR *fileName, BOOL isPng)
 	buf << sCrLf;
 
 	
-	CCHAR niceFileName[FNAME_MAXLEN];
-	wcstombs_s(0,niceFileName,sizeof niceFileName,fileName,FNAME_MAXLEN);
+	CCHAR niceFileName[MAX_PATH];
+	wcstombs_s(0,niceFileName,sizeof niceFileName,fileName,MAX_PATH);
 
 	// -- "imagedata" part
 	buf << "--";

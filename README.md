@@ -13,13 +13,14 @@ image type (PNG/JPG) before it gets sent to the server.
 Options are available in the `gyazaux.ini` file. Defaults:
 
 	[host]
-	upload_server=gyazo.com 
+	upload_server=gyazo.com
 	upload_path=/upload.cgi
 
 	[file]
 	default_jpg=0
 	default_name=
 	ask=1
+	save_local=.
 
 * `upload_server`: The host that the images will be sent to
 * `upload_path`: If using [Gyazaux-server][GS] or [Ben Alman's PHP script][Ben], 
@@ -31,6 +32,9 @@ Options are available in the `gyazaux.ini` file. Defaults:
 	* Leaving this blank is fine too; the naming will be left up to the server.
 * `ask`: If zero, the default options will be used each time, without 
 	a popup window (like standard Gyazo). Otherwise, popup. 
+* `save_local`: If not blank, the image will be saved in the given local 
+	directory. Relative directories can be specified with a `.` (e.g., 
+	`.\images`). The directory must exist, or there will be an error message.
 
 ### Acknowledgements
 * Gyazo for Mac was first developed by Toshiyuki Masui
