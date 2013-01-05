@@ -399,7 +399,37 @@ INT_PTR CALLBACK NameDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 	return FALSE;
 }
 
+void ErrorExit(LPTSTR lpszFunction) 
+{ 
+    // Retrieve the system error message for the last-error code
 
+    LPVOID lpMsgBuf;
+    LPVOID lpDisplayBuf;
+    DWORD dw = GetLastError(); 
+
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        dw,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPTSTR) &lpMsgBuf,
+        0, NULL );
+
+    // Display the error message and exit the process
+    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, 
+        (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR)); 
+    StringCchPrintf((LPTSTR)lpDisplayBuf, 
+        LocalSize(lpDisplayBuf) / sizeof(TCHAR),
+		TEXT("%s: %s (%d)"), 
+        lpszFunction, lpMsgBuf, dw); 
+    MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK); 
+
+    LocalFree(lpMsgBuf);
+    LocalFree(lpDisplayBuf);
+    ExitProcess(dw); 
+}
 // ウィンドウプロシージャ
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -515,18 +545,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_NAME), NULL, 
 				NameDlgProc, (LPARAM)&data);
 			imgExt = data.isPng ? _T(".png") : _T(".jpg");
-			StringCchCat(data.name,sizeof(data.name), imgExt);
+			StringCchCat(tmpFile, MAX_PATH, imgExt);
 
 			GetTempPath(MAX_PATH, tmpDir);
 			GetTempFileName(tmpDir,_T("gya"), 0, tmpFile);
 			StringCchCat(tmpFile, MAX_PATH, imgExt);
 
-
 			if (saveImage(tmpFile, newBMP, data.isPng)) {
-				// Show image if preview enabled
+				/*
 				if (GetPrivateProfileInt(_T("file"), _T("preview"), 0, iniLocation))
 					ShellExecute(NULL, _T("open"), tmpFile, NULL, NULL, SW_SHOWNORMAL);
-				//uploadFile(hWnd, tmpFile, data.name, data.isPng); // DISABLED FOR DEBUG
+				*/
+				uploadFile(hWnd, tmpFile, data.name, data.isPng); // DISABLED FOR DEBUG
 			} else {
 				MessageBox(hWnd, _T("Cannot save image"), szTitle, 
 					MB_OK | MB_ICONERROR);
@@ -536,27 +566,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			GetPrivateProfileString(_T("file"), _T("save_local"), _T(""), 
 				localDir, MAX_PATH, iniLocation);
 
-			WIN32_FIND_DATA fdStruct;
 			wchar_t counterBuf[16];
 			int i = 0;
 			if (_tcslen(localDir) > 0) {
-				do {
+				// Append counter to file if file already exists
+				// Note: Could be slow if many files exist with same prefix
+				for(i=0;;i++) {
 					wcscpy_s(localPath, MAX_PATH, localDir);
 					StringCchCat(localPath, MAX_PATH, _T("\\"));
 					StringCchCat(localPath, MAX_PATH, data.name);
-					if (i++) {
+					if (i) {
 						_itow_s(i, counterBuf, 16, 10);
 						StringCchCat(localPath, MAX_PATH, counterBuf);
 					}
 					StringCchCat(localPath, MAX_PATH, imgExt);
-					FindFirstFile(localPath,&fdStruct);
+					
+					if (CopyFile(tmpFile,localPath,true))
+						break;
+					if (GetLastError() != ERROR_FILE_EXISTS)
+						ErrorExit(_T("Local save failed"));
 				}
-				while(GetLastError() != ERROR_FILE_NOT_FOUND);
-				if (!saveImage(localDir, newBMP, data.isPng))
-					MessageBox(hWnd, _T("Local save failed"), szTitle, 
-						MB_OK | MB_ICONERROR);
 			}
-				
 
 			// 後始末
 			DeleteFile(tmpFile);
