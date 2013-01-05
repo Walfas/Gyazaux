@@ -2,8 +2,7 @@
 
 #include "resource.h"
 
-#define FNAME_MAXLEN 256
 struct nameData {
-	TCHAR name[FNAME_MAXLEN];
+	TCHAR name[MAX_PATH];
 	BOOL isPng;
 };
